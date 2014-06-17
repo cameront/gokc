@@ -1,0 +1,26 @@
+{
+    "AppName": "example",
+    "Kinesis": {
+    	"Auth": {
+    		"AccessKey": "YOUR KINESIS ACCESS KEY HERE",
+ 		"SecretKey": "YOUR KINESIS SECRET KEY HERE"
+ 		},
+		"StreamName":                "entities",
+		"MaxRecordsPerFetch":        10000,
+		"GetRecordsIntervalSeconds": 3,
+		"ShardSyncIntervalSeconds":  60
+    },
+    "LeaseDurationSeconds": 30,
+    "LeaseTable": {
+    	"Auth": {
+		"AccessKey": "YOUR DYNAMO ACCESS KEY HERE",
+		"SecretKey": "YOUR DYNAMO SECRET KEY HERE"
+		},
+		"ReadCapacity":              2,
+		"WriteCapacity":             2,
+		"CreateTimeoutSeconds":      60,
+		"CreatePollIntervalSeconds": 10
+    },
+    "NumProcessorsPerShard": 2,
+    "ReadOnly":              false
+}
