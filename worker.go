@@ -50,8 +50,11 @@ func waitToBeKilled(quit chan struct{}, checkpoints chan ShardCheckpoint) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill)
 	// Block until a signal is received.
-	s := <-c
-	log.Println("Worker: got signal:", s)
+	select {
+	case s := <-c:
+		log.Println("Worker: got signal:", s)
+		// TODO: Also close if all processing has stopped. But don't consume shardCheckpoints otherwise.
+	}
 	close(quit)
 	for _, ok := <-checkpoints; ok; {
 		// Wait until checkpoints (the last stream) is closed by consumption manager

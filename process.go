@@ -34,9 +34,8 @@ type RecordProcessor interface {
 }
 
 //
-// 
 //
-
+//
 
 type ShardConsumptionManager interface {
 	Start(<-chan LeaseNotification, chan<- ShardCheckpoint)
