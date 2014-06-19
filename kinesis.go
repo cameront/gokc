@@ -97,7 +97,7 @@ func (self *KinesisShardLister) List() ([]*Shard, error) {
 			return nil, err
 		}
 		copyShardsInto(response.StreamDescription.Shards, &result)
-		if !response.StreamDescription.IsMoreDataAvailable {
+		if !response.StreamDescription.HasMoreShards {
 			hasMoreShards = false
 		} else {
 			args.Add("ExclusiveStartShardId", result[len(result)-1].ShardId)
