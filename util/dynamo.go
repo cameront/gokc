@@ -1,6 +1,7 @@
-package gokc
+package util
 
 import (
+	"github.com/cameront/gokc/config"
 	"log"
 	"math"
 	"math/rand"
@@ -389,7 +390,7 @@ func (self *DynamoLeaseRenewer) RenewCurrent() []*Lease {
 		}
 	}
 	if len(self.owned) > 0 {
-		log.Printf("Renew: Now own %d lease(s): %v", len(self.owned), self.owned)
+		//log.Printf("Renew: Now own %d lease(s): %v", len(self.owned), self.owned)
 	}
 	return lost
 }

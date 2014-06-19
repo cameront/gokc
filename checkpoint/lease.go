@@ -1,16 +1,10 @@
-package gokc
+package checkpoint
 
 import (
 	"time"
 )
 
-const (
-	// The checkpoint value indicating that we've completely processed all
-	// records in this shard.
-	SHARD_END = "SHARD_END"
-)
-
-// Lease contains data pertaining to the temporary "ownership" of a shard by a
+// Lease is a representation of a processes temporary "ownership" of a shard by a
 // worker, which can be used to partition work across a fleet of workers. Each
 // unit of work (identified by its key) has a corresponding lease. Every worker
 // will contend for all leases - only one worker will successfully take each
@@ -34,6 +28,10 @@ type Lease struct {
 
 }
 
+// The checkpoint value indicating that we've completely processed all
+// records in this shard.
+const SHARD_END = "SHARD_END"
+
 func (lease Lease) ShardDone() bool {
 	return lease.checkpoint == SHARD_END
 }
@@ -45,20 +43,25 @@ type LeaseNotification struct {
 	Lease Lease
 }
 
-// LeaseTaker's are greedy lease-loving things. Implementers of the interface
+// LeaseTaker is  are greedy lease-loving things. Implementers of the interface
 // are meant to be called periodically to see if there are leases that this
 // worker can assume ownership of.
 type LeaseTaker interface {
-	// Compute the set of leases available to be taken and attempt to take them.
+	// Take computes the set of leases available to be taken... and takes them.
 	// Lease taking rules are:
 	// 1) If a lease's counter hasn't changed in long enough, try to take it.
 	// 2) If we see a lease we've never seen before, take it only if
 	//    owner == null. If it's owned, odds are the owner is holding it. We
 	//    can't tell until we see it more than once.
-	// 3) For load balancing purposes, you may violate rules 1 and 2 for EXACTLY
-	//    ONE lease per call of takeLeases()
-	// Returns a map of shardId to Lease for the leases successfully taken.
+	// 3) For load balancing purposes, you may violate rules 1 and 2 for ONE
+	//   lease per call to Take()
+	// Returns a slice of the leases successfully taken.
+
+	 TODO: Why even have a Take() method? Why not just have the lease taker
+	// decide how often to poll, based on the lease time, and just communicate
+	// via the channel?
 	Take() []*Lease
+	// Start 
 	Start(<-chan Shard) <-chan Lease
 }
 

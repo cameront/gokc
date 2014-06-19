@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"github.com/cameront/gokc"
+	"github.com/cameront/gokc/config"
 	"log"
 )
 
@@ -28,7 +28,7 @@ func (self *ExampleRecordProcessor) StartProcessing(in <-chan []*gokc.Record, ac
 func main() {
 	configFile := flag.String("config", "./config.json", "Config file path.")
 	flag.Parse()
-	config := gokc.ParseConfigOrDie(*configFile)
+	config := config.ParseConfigOrDie(*configFile)
 	processorFactory := func() gokc.RecordProcessor { return &ExampleRecordProcessor{} }
 	worker := gokc.NewWorker(&config, processorFactory)
 	worker.Start()
