@@ -1,4 +1,4 @@
-package gokc
+package checkpoint
 
 import (
 	"log"

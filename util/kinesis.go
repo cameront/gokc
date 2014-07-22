@@ -1,4 +1,4 @@
-package gokc
+package util
 
 import (
 	"encoding/json"

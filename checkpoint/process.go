@@ -1,4 +1,4 @@
-package gokc
+package checkpoint
 
 import (
 	k "github.com/sendgridlabs/go-kinesis"
@@ -140,7 +140,8 @@ func (self *KinesisShardConsumer) loop(checkpoint string, checkpoints chan<- Sha
 			return
 		case <-fetchTicker.C:
 			if len(recordsInFlight) > 0 {
-				log.Print("Not finished processing previous batch. Will not fetch records.")
+				//log.Print("Not finished processing previous batch. Will not fetch records.")
+				log.Println(len(recordsInFlight), " records in flight.")
 				continue
 			}
 			// TODO: If the interval is too long, the iterator may expire. I wonder if ConsumeShard
@@ -180,9 +181,11 @@ func (self *KinesisShardConsumer) loop(checkpoint string, checkpoints chan<- Sha
 			delete(recordsInFlight, sequenceNumber)
 			if len(recordsInFlight) == 0 {
 				// Update the shard's checkpoint with the latest sequenceNumber.
+				log.Printf("Processing done. Updating checkpoint for %v to %v.\n", self.shardId, checkpoint)
 				checkpoints <- ShardCheckpoint{self.shardId, checkpoint}
 			}
 		case <-time.After(5 * time.Second):
+			// Will fire after the fetchTicker stops.
 			if checkpoint == SHARD_END && len(recordsInFlight) == 0 {
 				// Send the final checkpoint, and schedule an exit.
 				checkpoints <- ShardCheckpoint{self.shardId, checkpoint}
