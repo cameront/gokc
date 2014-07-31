@@ -1,4 +1,4 @@
-package checkpoint
+package gokc
 
 import (
 	"time"
@@ -57,11 +57,11 @@ type LeaseTaker interface {
 	//   lease per call to Take()
 	// Returns a slice of the leases successfully taken.
 
-	 TODO: Why even have a Take() method? Why not just have the lease taker
+	// TODO: Why even have a Take() method? Why not just have the lease taker
 	// decide how often to poll, based on the lease time, and just communicate
 	// via the channel?
 	Take() []*Lease
-	// Start 
+	// Start
 	Start(<-chan Shard) <-chan Lease
 }
 

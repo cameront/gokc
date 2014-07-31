@@ -1,7 +1,6 @@
-package util
+package gokc
 
 import (
-	"github.com/cameront/gokc/config"
 	"log"
 	"math"
 	"math/rand"

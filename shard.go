@@ -1,4 +1,4 @@
-package checkpoint
+package gokc
 
 import (
 	k "github.com/sendgridlabs/go-kinesis"
@@ -7,47 +7,16 @@ import (
 	"time"
 )
 
-// TODO(Cameron): Move this somewhere smarter
-type Record struct {
-	PartitionKey   string
-	SequenceNumber string
-	Data           []byte
-}
-
-// GokcMeta is a struct that you can optionally include or wrap as part of your
-// data payload to keep track of failure/retry cases/conditions.
-type GokcMeta struct {
-	Retried      int
-	Failed       int
-	FailReasons  []string
-	RetryReasons []string
-}
-
-// RecordProcessor is the interface implemented by
-// TODO(Cameron): RecordProcessor should be an internal thing to the gokcl
-// library. Clients should really be implementing the method Process.
-// Still to decide:
-// Not clear whether they should have channels that allow them to push data
-// to other streams, or whether that should be handled by the wrapper.
-type RecordProcessor interface {
-	StartProcessing(<-chan []*Record, chan<- string)
-}
-
-//
-//
-//
-
 type ShardConsumptionManager interface {
 	Start(<-chan LeaseNotification, chan<- ShardCheckpoint)
 }
 
-type RecordProcessorFactory func() RecordProcessor
 type ShardConsumerFactory func(string) ShardConsumer
 
-func NewKinesisShardConsumptionManager(config *Config, processorFactory RecordProcessorFactory) *KinesisShardConsumptionManager {
+func NewKinesisShardConsumptionManager(config *Config, factory MessageProcessorFactory) *KinesisShardConsumptionManager {
 	return &KinesisShardConsumptionManager{
 		consumerFactory: func(shardId string) ShardConsumer {
-			return NewKinesisShardConsumer(config, shardId, processorFactory)
+			return NewKinesisShardConsumer(config, shardId, factory)
 		},
 		consumers: map[string]ShardConsumer{},
 	}
@@ -97,19 +66,19 @@ type ShardConsumer interface {
 	Quit()
 }
 
-func NewKinesisShardConsumer(config *Config, shardId string, processorFactory RecordProcessorFactory) *KinesisShardConsumer {
+func NewKinesisShardConsumer(config *Config, shardId string, factory MessageProcessorFactory) *KinesisShardConsumer {
 	if config.NumProcessorsPerShard < 1 {
 		log.Fatal("Need at least 1 processors per shard. Current: ", config.NumProcessorsPerShard)
 	}
 
 	return &KinesisShardConsumer{
-		processorFactory:         processorFactory,
+		messageProcessorFactory:  factory,
 		numProcessors:            config.NumProcessorsPerShard,
 		streamName:               config.Kinesis.StreamName,
 		maxRecordsPerFetch:       config.Kinesis.MaxRecordsPerFetch,
 		getRecordIntervalSeconds: time.Duration(config.Kinesis.GetRecordsIntervalSeconds) * time.Second,
 		shardId:                  shardId,
-		conn:                     k.New(config.Kinesis.Auth.AccessKey, config.Kinesis.Auth.SecretKey),
+		conn:                     k.New(config.Kinesis.Auth.AccessKey, config.Kinesis.Auth.SecretKey, k.USWest2),
 		quit:                     make(chan interface{}, 1),
 	}
 }
@@ -121,11 +90,11 @@ type KinesisShardConsumer struct {
 	maxRecordsPerFetch       int
 	getRecordIntervalSeconds time.Duration
 	conn                     k.KinesisClient
-	processorFactory         RecordProcessorFactory
+	messageProcessorFactory  MessageProcessorFactory
 	quit                     chan interface{}
 }
 
-func (self *KinesisShardConsumer) loop(checkpoint string, checkpoints chan<- ShardCheckpoint, c *consistent.Consistent, processorMap map[string]chan []*Record, finished <-chan string) {
+func (self *KinesisShardConsumer) loop(checkpoint string, checkpoints chan<- ShardCheckpoint, c *consistent.Consistent, processorMap map[string]chan *Message, finished <-chan Ack) {
 	iteratorType := "TRIM_HORIZON"
 	if checkpoint != "" {
 		iteratorType = "AFTER_SEQUENCE_NUMBER"
@@ -169,7 +138,13 @@ func (self *KinesisShardConsumer) loop(checkpoint string, checkpoints chan<- Sha
 				// checkpoint to the current sequence number.
 				checkpoint = record.SequenceNumber
 				recordsInFlight[record.SequenceNumber] = true
-				processorChan <- getRecordsFromKRecordsResponse(record)
+
+				data, err := record.GetData()
+				if err != nil {
+					log.Print("ERROR: Calling kinesis.GetData() for record. ", err)
+					panic("TODO: send retry or fail ack")
+				}
+				processorChan <- &Message{Id: record.SequenceNumber, Data: data}
 			}
 			shardIterator = resp.NextShardIterator
 			if shardIterator == "" {
@@ -177,8 +152,9 @@ func (self *KinesisShardConsumer) loop(checkpoint string, checkpoints chan<- Sha
 				checkpoint = SHARD_END
 				fetchTicker.Stop()
 			}
-		case sequenceNumber := <-finished:
-			delete(recordsInFlight, sequenceNumber)
+		case ack := <-finished:
+			delete(recordsInFlight, ack.Id)
+			log.Println("TODO: react accordingly to ack.Result")
 			if len(recordsInFlight) == 0 {
 				// Update the shard's checkpoint with the latest sequenceNumber.
 				log.Printf("Processing done. Updating checkpoint for %v to %v.\n", self.shardId, checkpoint)
@@ -195,30 +171,16 @@ func (self *KinesisShardConsumer) loop(checkpoint string, checkpoints chan<- Sha
 	}
 }
 
-func getRecordsFromKRecordsResponse(record k.GetRecordsRecords) []*Record {
-	result := []*Record{}
-	data, err := record.GetData()
-	if err != nil {
-		log.Print("ERROR: Calling kinesis.GetData() for record. ", err)
-	}
-	result = append(result, &Record{
-		Data:           data,
-		PartitionKey:   record.PartitionKey,
-		SequenceNumber: record.SequenceNumber,
-	})
-	return result
-}
-
 func (self *KinesisShardConsumer) Start(lastCheckpoint string, checkpoints chan<- ShardCheckpoint) {
 	c := consistent.New()
-	processorMap := map[string]chan []*Record{}
-	finished := make(chan string, self.maxRecordsPerFetch)
+	processorMap := map[string]chan *Message{}
+	finished := make(chan Ack, self.maxRecordsPerFetch)
 	for i := 0; i < self.numProcessors; i++ {
 		id := string(i)
 		c.Add(id)
-		recordChannel := make(chan []*Record, self.maxRecordsPerFetch/self.numProcessors)
-		go self.processorFactory().StartProcessing(recordChannel, finished)
-		processorMap[id] = recordChannel
+		messageChan := make(chan *Message, self.maxRecordsPerFetch)
+		go self.messageProcessorFactory().Start(messageChan, finished)
+		processorMap[id] = messageChan
 	}
 	go self.loop(lastCheckpoint, checkpoints, c, processorMap, finished)
 }

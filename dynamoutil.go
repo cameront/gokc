@@ -1,4 +1,4 @@
-package util
+package gokc
 
 // RENAME TO: dynamo/util.go or dynamo/client.go
 

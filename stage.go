@@ -1,4 +1,4 @@
-package checkpoint
+package gokc
 
 import (
 	"log"
@@ -7,21 +7,21 @@ import (
 	"time"
 )
 
-func NewWorker(config *Config, processorFactory RecordProcessorFactory) *Worker {
+func NewStage(config *Config, messageProcessorFactory MessageProcessorFactory) *Stage {
 	config.Init()
-	worker := &Worker{}
-	worker.init(config, processorFactory)
-	return worker
+	stage := &Stage{}
+	stage.init(config, messageProcessorFactory)
+	return stage
 }
 
-type Worker struct {
+type Stage struct {
 	leaseTaker   LeaseTaker
 	leaseRenewer LeaseRenewer
 	shardManager ShardConsumptionManager
 	shardLister  ShardLister
 }
 
-func (self *Worker) init(config *Config, processorFactory RecordProcessorFactory) {
+func (self *Stage) init(config *Config, factory MessageProcessorFactory) {
 	InitDynamoConfig(config)
 	if config.LeaseTable.Create {
 		self.createAndWaitForTable(config)
@@ -29,10 +29,10 @@ func (self *Worker) init(config *Config, processorFactory RecordProcessorFactory
 	self.leaseTaker = NewDynamoLeaseTaker(config)
 	self.leaseRenewer = NewDynamoLeaseRenewer(config)
 	self.shardLister = NewKinesisShardLister(config.Kinesis)
-	self.shardManager = NewKinesisShardConsumptionManager(config, processorFactory)
+	self.shardManager = NewKinesisShardConsumptionManager(config, factory)
 }
 
-func (self *Worker) createAndWaitForTable(conf *Config) {
+func (self *Stage) createAndWaitForTable(conf *Config) {
 	log.Print("Creating table...")
 	leaseManager := NewDynamoLeaseManager(conf)
 	if err := leaseManager.CreateTable(conf.LeaseTable.ReadCapacity, conf.LeaseTable.WriteCapacity); err != nil {
@@ -61,7 +61,7 @@ func waitToBeKilled(quit chan struct{}, checkpoints chan ShardCheckpoint) {
 	}
 }
 
-func (self *Worker) Start() {
+func (self *Stage) Start() {
 	quit := make(chan struct{})
 	checkpoints := make(chan ShardCheckpoint, 10) // Owned/closed by the consumption manager
 
@@ -71,5 +71,5 @@ func (self *Worker) Start() {
 	self.shardManager.Start(leaseNotifications, checkpoints)
 
 	waitToBeKilled(quit, checkpoints)
-	log.Print("Worker: Exiting.")
+	log.Print("Stage: Exiting.")
 }

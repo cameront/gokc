@@ -2,34 +2,34 @@ package main
 
 import (
 	"flag"
-	"github.com/cameront/gokc/config"
+	"github.com/cameront/gokc"
 	"log"
 )
 
-type ExampleRecordProcessor struct{}
+// ExampleMessageProcessor expects string payloads and always acks Success
+type ExampleMessageProcessor struct{}
 
-func (self *ExampleRecordProcessor) StartProcessing(in <-chan []*gokc.Record, ack chan<- string) {
+func (self *ExampleMessageProcessor) Start(messageChan <-chan *gokc.Message, ackChan chan<- gokc.Ack) {
 	for {
 		select {
-		case records, ok := <-in:
+		case input, ok := <-messageChan:
 			if !ok {
-				log.Print("ExampleRecordProcessor: channel closed. Exiting")
+				log.Print("ExampleMessageProcessor: channel closed. Exiting")
 				return
 			}
-			for _, record := range records {
-				log.Printf("%+v", string(record.Data))
-				ack <- record.SequenceNumber
-			}
+			log.Printf("%s\n", string(input.Data))
+			ackChan <- gokc.Ack{Id: input.Id, Result: gokc.SUCCESS}
 		}
 	}
-	log.Print("SimpleRecordProcessor exiting")
+	log.Print("ExampleMessageProcessor exiting")
 }
 
 func main() {
 	configFile := flag.String("config", "./config.json", "Config file path.")
 	flag.Parse()
-	config := config.ParseConfigOrDie(*configFile)
-	processorFactory := func() gokc.RecordProcessor { return &ExampleRecordProcessor{} }
-	worker := gokc.NewWorker(&config, processorFactory)
-	worker.Start()
+	config := gokc.MustParseConfig(*configFile)
+
+	processorFactory := func() gokc.MessageProcessor { return &ExampleMessageProcessor{} }
+	stage := gokc.NewStage(&config, processorFactory)
+	stage.Start()
 }

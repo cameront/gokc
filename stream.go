@@ -1,11 +1,15 @@
-package util
+package gokc
 
 import (
 	"encoding/json"
-	k "github.com/sendgridlabs/go-kinesis"
+	sgk "github.com/sendgridlabs/go-kinesis"
 	"log"
 	"time"
 )
+
+type StreamWriter interface {
+	Write(partitionKey string, data interface{}) error
+}
 
 // Shard is a mirror of sendgridlabs/go-kinesis.Shard, but one that we control.
 type Shard struct {
@@ -28,10 +32,8 @@ type ShardCheckpoint struct {
 	SequenceNumber string
 }
 
-// ShardLister returns a channel from which all shards will periodically be
-// sent.
+// ShardLister returns a channel to which all shards will periodically be sent.
 type ShardLister interface {
-	//List() ([]*Shard, error)
 	Start(<-chan struct{}) <-chan Shard
 }
 
@@ -40,7 +42,7 @@ func NewKinesisShardLister(kConfig KinesisConfig) *KinesisShardLister {
 	return &KinesisShardLister{
 		streamName:          kConfig.StreamName,
 		syncIntervalSeconds: time.Duration(kConfig.ShardSyncIntervalSeconds) * time.Second,
-		conn:                k.New(kConfig.Auth.AccessKey, kConfig.Auth.SecretKey),
+		conn:                sgk.New(kConfig.Auth.AccessKey, kConfig.Auth.SecretKey, sgk.Region{kConfig.Region}),
 	}
 }
 
@@ -49,7 +51,7 @@ func NewKinesisShardLister(kConfig KinesisConfig) *KinesisShardLister {
 type KinesisShardLister struct {
 	streamName          string
 	syncIntervalSeconds time.Duration
-	conn                k.KinesisClient
+	conn                sgk.KinesisClient
 }
 
 func (self *KinesisShardLister) loop(quit <-chan struct{}, allShards chan<- Shard) {
@@ -89,7 +91,7 @@ func (self *KinesisShardLister) Start(quit <-chan struct{}) <-chan Shard {
 func (self *KinesisShardLister) List() ([]*Shard, error) {
 	hasMoreShards := true
 	result := []*Shard{}
-	args := k.NewArgs()
+	args := sgk.NewArgs()
 	args.Add("StreamName", self.streamName)
 	for hasMoreShards {
 		response, err := self.conn.DescribeStream(args)
@@ -108,7 +110,7 @@ func (self *KinesisShardLister) List() ([]*Shard, error) {
 
 // copyShardsInto copies an array of struct into an array of struct pointers.
 // It's a little silly.
-func copyShardsInto(src []k.DescribeStreamShards, dest *[]*Shard) error {
+func copyShardsInto(src []sgk.DescribeStreamShards, dest *[]*Shard) error {
 	for _, other := range src {
 		shard, err := fromDescribeStreamShard(other)
 		if err != nil {
@@ -121,7 +123,7 @@ func copyShardsInto(src []k.DescribeStreamShards, dest *[]*Shard) error {
 
 // terrible way to reassign ownership from their shard to ours, but hopefully
 // this doesn't happen often enough to notice.
-func fromDescribeStreamShard(other k.DescribeStreamShards) (*Shard, error) {
+func fromDescribeStreamShard(other sgk.DescribeStreamShards) (*Shard, error) {
 	shard := Shard{}
 	bytes, err := json.Marshal(other)
 	if err != nil {
@@ -143,8 +145,8 @@ func fromDescribeStreamShard(other k.DescribeStreamShards) (*Shard, error) {
 // log.Printf("Got %d records.", len(recResp.Records))
 // for _, d := range recResp.Records {
 
-func GetShardIterator(conn k.KinesisClient, streamName, shardId, iteratorType, startingSequenceNumber string) string {
-	args := k.NewArgs()
+func GetShardIterator(conn sgk.KinesisClient, streamName, shardId, iteratorType, startingSequenceNumber string) string {
+	args := sgk.NewArgs()
 	args.Add("StreamName", streamName)
 	args.Add("ShardId", shardId)
 	args.Add("ShardIteratorType", iteratorType)
@@ -158,8 +160,8 @@ func GetShardIterator(conn k.KinesisClient, streamName, shardId, iteratorType, s
 	return resp.ShardIterator
 }
 
-func ConsumeShard(conn k.KinesisClient, streamName, shardIterator string, limit int) *k.GetRecordsResp {
-	args := k.NewArgs()
+func ConsumeShard(conn sgk.KinesisClient, streamName, shardIterator string, limit int) *sgk.GetRecordsResp {
+	args := sgk.NewArgs()
 	args.Add("ShardIterator", shardIterator)
 	args.Add("Limit", limit)
 	resp, err := conn.GetRecords(args)
@@ -167,4 +169,42 @@ func ConsumeShard(conn k.KinesisClient, streamName, shardIterator string, limit 
 		log.Print("ConsumeShard error: ", err)
 	}
 	return resp
+}
+
+//
+// KinesisStreamWriter
+//
+
+func NewKinesisWriter(config KinesisConfig) *KinesisWriter {
+	conn := sgk.New(config.Auth.AccessKey, config.Auth.SecretKey, sgk.Region{config.Region})
+	return &KinesisWriter{
+		client:     conn,
+		streamName: config.StreamName,
+	}
+}
+
+type KinesisWriter struct {
+	client     sgk.KinesisClient
+	streamName string
+}
+
+func ConstructArgs(streamName string, partitionKey string, entity interface{}) (*sgk.RequestArgs, error) {
+	args := sgk.NewArgs()
+	args.Add("StreamName", streamName)
+	bytes, err := json.Marshal(entity)
+	if err != nil {
+		return nil, err
+	}
+	args.Add("PartitionKey", partitionKey)
+	args.AddData(bytes)
+	return args, nil
+}
+
+func (self *KinesisWriter) Write(partitionKey string, entity interface{}) error {
+	args, err := ConstructArgs(self.streamName, partitionKey, entity)
+	if err != nil {
+		return err
+	}
+	_, err = self.client.PutRecord(args)
+	return err
 }

@@ -29,6 +29,7 @@ type LeaseTableConfig struct {
 
 type KinesisConfig struct {
 	Auth                      AwsConfig
+	Region                    string
 	StreamName                string
 	MaxRecordsPerFetch        int
 	GetRecordsIntervalSeconds int
@@ -116,18 +117,20 @@ func InitDynamoConfig(config *Config) {
 	conf.Vals.Auth.Secret = config.LeaseTable.Auth.SecretKey
 	// Dynamo
 
-	// TODO(Cameron): Generate from lease table config!
-	conf.Vals.Network.DynamoDB.Host = "dynamodb.us-east-1.amazonaws.com"
-	conf.Vals.Network.DynamoDB.Zone = "us-east-1"
+	// TODO(Cameron): Generate from lease table config, or switch to a library that makes connection
+	// params easier to specify.
+	conf.Vals.Network.DynamoDB.Host = "dynamodb.us-west-2.amazonaws.com"
+	conf.Vals.Network.DynamoDB.Zone = "us-west-2"
 	conf.Vals.Network.DynamoDB.Scheme = "http"
 	conf.Vals.Network.DynamoDB.Port = "80"
-	conf.Vals.Network.DynamoDB.URL = "http://dynamodb.us-east-1.amazonaws.com:80"
+	conf.Vals.Network.DynamoDB.URL = "http://dynamodb.us-west-2.amazonaws.com:80"
 	conf.Vals.Network.DynamoDB.KeepAlive = true
 
 	conf.Vals.ConfLock.Unlock()
+
 }
 
-func ParseConfigOrDie(path string) Config {
+func MustParseConfig(path string) Config {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Fatalf("Error reading config file: %s. %s", path, err)
