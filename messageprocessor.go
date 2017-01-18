@@ -13,13 +13,25 @@ type Ack struct {
 	Result AckResult
 }
 
-type Message struct {
-	Id   string
-	Data []byte
+type Message interface {
+	Id() string
+	Data() []byte
 }
 
+func NewBasicMessage(id string, data []byte) *BasicMessage {
+	return &BasicMessage{id: id, data: data}
+}
+
+type BasicMessage struct {
+	id   string
+	data []byte
+}
+
+func (b *BasicMessage) Id() string   { return b.id }
+func (b *BasicMessage) Data() []byte { return b.data }
+
 type MessageProcessor interface {
-	Start(<-chan *Message, chan<- Ack)
+	Start(input chan Message, success chan Shardable, retry chan Message, failure chan Message)
 }
 
 type MessageProcessorFactory func() MessageProcessor

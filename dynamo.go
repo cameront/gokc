@@ -315,7 +315,7 @@ type DynamoLeaseRenewer struct {
 	owned                map[string]*Lease
 }
 
-func (self *DynamoLeaseRenewer) Start(newLease <-chan Lease, checkpoint <-chan ShardCheckpoint) <-chan LeaseNotification {
+func (self *DynamoLeaseRenewer) Start(newLease <-chan Lease, checkpoint <-chan Checkpoint) <-chan LeaseNotification {
 	// Renewer runs at fixed INTERVAL because we want it to run at the same
 	// rate in the event of degredation.
 	renewTicker := time.NewTicker(self.leaseDurationSeconds / 3).C
@@ -342,11 +342,11 @@ func (self *DynamoLeaseRenewer) Start(newLease <-chan Lease, checkpoint <-chan S
 					notifications <- LeaseNotification{Lost: false, Lease: gained}
 				}
 			case c := <-checkpoint:
-				if lease, found := self.owned[c.ShardId]; found {
-					if lease.checkpoint != c.SequenceNumber {
-						log.Printf("Renew: Updating lease checkpoint for %s to %s", lease.key, c.SequenceNumber)
+				if lease, found := self.owned[c.Id()]; found {
+					if lease.checkpoint != c.Value() {
+						log.Printf("Renew: Updating lease checkpoint for %s to %s", lease.key, c.Value())
 					}
-					lease.checkpoint = c.SequenceNumber
+					lease.checkpoint = c.Value()
 					lease.lastUpdate = time.Now().UTC()
 				}
 			}

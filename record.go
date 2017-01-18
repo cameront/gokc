@@ -29,3 +29,8 @@ type RecordMeta struct {
 	Info       string
 	Payload    []byte
 }
+
+// Shardable is anything that produces shard keys.
+type Shardable interface {
+	PartitionKey() string
+}

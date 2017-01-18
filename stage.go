@@ -7,21 +7,21 @@ import (
 	"time"
 )
 
-func NewStage(config *Config, messageProcessorFactory MessageProcessorFactory) *Stage {
+func NewStage(config *Config, processor MessageProcessor) *Stage {
 	config.Init()
 	stage := &Stage{}
-	stage.init(config, messageProcessorFactory)
+	stage.init(config, processor)
 	return stage
 }
 
 type Stage struct {
 	leaseTaker   LeaseTaker
 	leaseRenewer LeaseRenewer
-	shardManager ShardConsumptionManager
+	shardManager StreamConsumptionManager
 	shardLister  ShardLister
 }
 
-func (self *Stage) init(config *Config, factory MessageProcessorFactory) {
+func (self *Stage) init(config *Config, processor MessageProcessor) {
 	InitDynamoConfig(config)
 	if config.LeaseTable.Create {
 		self.createAndWaitForTable(config)
@@ -29,7 +29,7 @@ func (self *Stage) init(config *Config, factory MessageProcessorFactory) {
 	self.leaseTaker = NewDynamoLeaseTaker(config)
 	self.leaseRenewer = NewDynamoLeaseRenewer(config)
 	self.shardLister = NewKinesisShardLister(config.Kinesis)
-	self.shardManager = NewKinesisShardConsumptionManager(config, factory)
+	self.shardManager = NewKinesisShardConsumptionManager(config, processor)
 }
 
 func (self *Stage) createAndWaitForTable(conf *Config) {
@@ -46,7 +46,7 @@ func (self *Stage) createAndWaitForTable(conf *Config) {
 	log.Print("Created table.")
 }
 
-func waitToBeKilled(quit chan struct{}, checkpoints chan ShardCheckpoint) {
+func waitToQuit(quit chan struct{}, checkpoints chan Checkpoint) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill)
 	// Block until a signal is received.
@@ -63,13 +63,13 @@ func waitToBeKilled(quit chan struct{}, checkpoints chan ShardCheckpoint) {
 
 func (self *Stage) Start() {
 	quit := make(chan struct{})
-	checkpoints := make(chan ShardCheckpoint, 10) // Owned/closed by the consumption manager
+	checkpoints := make(chan Checkpoint, 10) // Owned/closed by the consumption manager
 
 	shards := self.shardLister.Start(quit)
 	newLeases := self.leaseTaker.Start(shards)
 	leaseNotifications := self.leaseRenewer.Start(newLeases, checkpoints)
 	self.shardManager.Start(leaseNotifications, checkpoints)
 
-	waitToBeKilled(quit, checkpoints)
+	waitToQuit(quit, checkpoints)
 	log.Print("Stage: Exiting.")
 }

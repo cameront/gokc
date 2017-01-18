@@ -6,10 +6,15 @@ import (
 	"log"
 )
 
-// ExampleMessageProcessor expects string payloads and always acks Success
-type ExampleMessageProcessor struct{}
+type BasicPrefixer struct {
+	prefix string
+}
 
-func (self *ExampleMessageProcessor) Start(messageChan <-chan *gokc.Message, ackChan chan<- gokc.Ack) {
+func (b *BasicPrefixer) Init(input chan Message, success chan Shardable, retry chan Message, failure chan Message) error {
+
+}
+
+func Example(string input, success chan<- gokc.Shardable, fail chan<- gokc.Message, retry chan<- gokc.Message) {
 	for {
 		select {
 		case input, ok := <-messageChan:
@@ -18,7 +23,7 @@ func (self *ExampleMessageProcessor) Start(messageChan <-chan *gokc.Message, ack
 				return
 			}
 			log.Printf("%s\n", string(input.Data))
-			ackChan <- gokc.Ack{Id: input.Id, Result: gokc.SUCCESS}
+			success <- gokc.Ack{Id: input.Id, Result: gokc.SUCCESS}
 		}
 	}
 	log.Print("ExampleMessageProcessor exiting")

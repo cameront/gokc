@@ -27,10 +27,18 @@ type Shard struct {
 }
 
 // ShardCheckpoint is ...
-type ShardCheckpoint struct {
-	ShardId        string
-	SequenceNumber string
+type Checkpoint interface {
+	Id() string
+	Value() string
 }
+
+type KinesisShardCheckpoint struct {
+	shardId        string
+	sequenceNumber string
+}
+
+func (kc *KinesisShardCheckpoint) Id() string    { return kc.shardId }
+func (kc *KinesisShardCheckpoint) Value() string { return kc.sequenceNumber }
 
 // ShardLister returns a channel to which all shards will periodically be sent.
 type ShardLister interface {

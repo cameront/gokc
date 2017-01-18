@@ -72,7 +72,7 @@ type LeaseRenewer interface {
 	// Attempt to renew all active leases.
 	RenewCurrent() []*Lease
 	AddToRenew([]*Lease)
-	Start(<-chan Lease, <-chan ShardCheckpoint) <-chan LeaseNotification
+	Start(<-chan Lease, <-chan Checkpoint) <-chan LeaseNotification
 }
 
 // LeaseManager is the slightly-higher-level-than-crud interface for lease

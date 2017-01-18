@@ -6,11 +6,6 @@ import (
 	"log"
 )
 
-// Shardable is for anything that produces shard keys.
-type Shardable interface {
-	PartitionKey() string
-}
-
 // Consider providing shardable as a channel, instead of needing to separate
 // out the single/multi processor case here, and have an adapter,
 // which kind of sucks.
@@ -123,31 +118,31 @@ func (self *JsonProcessor) StartProcessing(in <-chan []*RawRecord, ack chan<- st
 	log.Print("JsonProcessor exiting")
 }
 
-// func StartWithConfig(configPath string, single TypedProcessor) {
-// 	StartMultiWithConfig(configPath, &MultiAdapter{single})
-// }
+func StartWithConfig(configPath string, single TypedProcessor) {
+	StartMultiWithConfig(configPath, &MultiAdapter{single})
+}
 
-// func StartMultiWithConfig(configPath string, multi TypedMultiProcessor) {
-// 	conf := struct {
-// 		SuccessStream *KinesisConfig
-// 		RetryStream   *KinesisConfig
-// 		FailureStream *KinesisConfig
-// 		Gokc          Config
-// 	}{}
-// 	if err := ParseConfigOrDie(configPath, &conf); err != nil {
-// 		log.Fatal("Unable to parse config from ", configPath)
-// 	}
-// 	log.SetPrefix(conf.Gokc.AppName + " ")
+func StartMultiWithConfig(configPath string, multi TypedMultiProcessor) {
+	conf := struct {
+		SuccessStream *KinesisConfig
+		RetryStream   *KinesisConfig
+		FailureStream *KinesisConfig
+		Gokc          Config
+	}{}
+	if err := ParseConfigOrDie(configPath, &conf); err != nil {
+		log.Fatal("Unable to parse config from ", configPath)
+	}
+	log.SetPrefix(conf.Gokc.AppName + " ")
 
-// 	processorFactory := func() MessageProcessor {
-// 		return &JsonProcessor{
-// 			typedProcessor: multi,
-// 			successStream:  NewKinesisWriter(*conf.SuccessStream),
-// 			retryStream:    NewKinesisWriter(*conf.FailureStream),
-// 			failStream:     NewKinesisWriter(*conf.FailureStream),
-// 		}
-// 	}
+	processorFactory := func() MessageProcessor {
+		return &JsonProcessor{
+			typedProcessor: multi,
+			successStream:  NewKinesisWriter(*conf.SuccessStream),
+			retryStream:    NewKinesisWriter(*conf.FailureStream),
+			failStream:     NewKinesisWriter(*conf.FailureStream),
+		}
+	}
 
-// 	worker := NewStage(&conf.Gokc, processorFactory)
-// 	worker.Start()
-// }
+	stage := NewStage(&conf.Gokc, processorFactory)
+	stage.Start()
+}

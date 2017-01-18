@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-type AwsConfig struct {
+type AwsAuth struct {
 	AccessKey string
 	SecretKey string
 }
 
 type LeaseTableConfig struct {
-	Auth                      AwsConfig
+	Auth                      AwsAuth
 	Create                    bool
 	Name                      string
 	ReadCapacity              uint64
@@ -28,7 +28,7 @@ type LeaseTableConfig struct {
 }
 
 type KinesisConfig struct {
-	Auth                      AwsConfig
+	Auth                      AwsAuth
 	Region                    string
 	StreamName                string
 	MaxRecordsPerFetch        int
@@ -49,17 +49,17 @@ var _config = Config{
 	AppName: "gokc", // You should DEFINITELY set this.
 
 	Kinesis: KinesisConfig{
-		Auth:                      AwsConfig{},
+		Auth:                      AwsAuth{},
 		StreamName:                "entities",
 		MaxRecordsPerFetch:        10000,
 		GetRecordsIntervalSeconds: 1,
 		ShardSyncIntervalSeconds:  60,
 	},
 
-	LeaseDurationSeconds: 10, //30,
+	LeaseDurationSeconds: 30,
 
 	LeaseTable: LeaseTableConfig{
-		Auth:                      AwsConfig{},
+		Auth:                      AwsAuth{},
 		Create:                    true,
 		Name:                      "", // This is set automatically.
 		ReadCapacity:              2,
